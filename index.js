@@ -18,11 +18,32 @@ const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology:
 
 async function run() {
     const categoriesCollection = client.db("nextrep").collection("categories");
+    const productsCollection = client.db("nextrep").collection("products");
+    const bookingsCollection = client.db("nextrep").collection("bookings");
 
+    // to load the brands
     app.get('/categories', async(req, res)=>{
         const query = {};
         const result = await categoriesCollection.find(query).toArray();
         res.send(result);
+    })
+
+    // to load the products of brands
+    app.get('/category/:id', async(req,res)=>{
+        const id = parseInt(req.params.id);
+        console.log(id);
+        const query ={ brandId: id};
+        const products = await productsCollection.find(query).toArray();
+        // console.log(products);
+        res.send(products);
+    })
+
+    // to post the booked products
+    app.post('/bookings', async(req, res)=>{
+        const booking = req.body;
+            console.log(booking);
+            const result = await bookingsCollection.insertOne(booking);
+            res.send(result);
     })
 }
 
