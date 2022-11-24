@@ -20,31 +20,63 @@ async function run() {
     const categoriesCollection = client.db("nextrep").collection("categories");
     const productsCollection = client.db("nextrep").collection("products");
     const bookingsCollection = client.db("nextrep").collection("bookings");
+    const usersCollection = client.db("nextrep").collection("users");
 
     // to load the brands
-    app.get('/categories', async(req, res)=>{
+    app.get('/categories', async (req, res) => {
         const query = {};
         const result = await categoriesCollection.find(query).toArray();
         res.send(result);
     })
 
     // to load the products of brands
-    app.get('/category/:id', async(req,res)=>{
+    app.get('/category/:id', async (req, res) => {
         const id = parseInt(req.params.id);
         console.log(id);
-        const query ={ brandId: id};
+        const query = { brandId: id };
         const products = await productsCollection.find(query).toArray();
         // console.log(products);
         res.send(products);
     })
 
+    // to get the booked products
+    app.get('/bookings', async (req, res) => {
+        const email = req.query.email;
+        console.log(email);
+        const query = { buyerEmail: email };
+        const bookings = await bookingsCollection.find(query).toArray();
+        res.send(bookings);
+    });
+
     // to post the booked products
-    app.post('/bookings', async(req, res)=>{
+    app.post('/bookings', async (req, res) => {
         const booking = req.body;
-            console.log(booking);
-            const result = await bookingsCollection.insertOne(booking);
-            res.send(result);
+        const result = await bookingsCollection.insertOne(booking);
+        res.send(result);
     })
+
+
+    // to get the sellers
+    app.get('/sellers', async (req, res) => {
+        const query = { accountType: 'Seller' };
+        const users = await usersCollection.find(query).toArray();
+        res.send(users);
+    });
+
+    // to get the buyers
+    app.get('/buyers', async (req, res) => {
+        const query = { accountType: 'Buyer' };
+        const users = await usersCollection.find(query).toArray();
+        res.send(users);
+    });
+
+    // to post the users
+    app.post('/users', async (req, res) => {
+        const user = req.body;
+        const result = await usersCollection.insertOne(user);
+        res.send(result);
+    })
+
 }
 
 run().catch(err => console.log(err))
