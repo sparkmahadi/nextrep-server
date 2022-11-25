@@ -39,6 +39,46 @@ async function run() {
         res.send(products);
     })
 
+    // to update a product with id
+    app.put('/products/:id', async(req, res)=>{
+        const id = req.params.id;
+            const query = { _id: ObjectId(id)};
+            const product = req.body;
+            console.log(product);
+            const option = {upsert: true};
+            const updateProduct = {
+                $set: {
+                    status: product.status
+                }
+            }
+            const result = await productsCollection.updateOne(query, updateProduct, option);
+            res.send(result);
+    })
+
+    // to post new product
+    app.post('/products', async (req, res) => {
+        const product = req.body;
+        console.log(product);
+        const result = await productsCollection.insertOne(product);
+        res.send(result);
+    });
+
+    // to get the advertised products
+    app.get('/advertisedProducts', async(req, res)=>{
+        const query = {advertised: true, status: 'available'};
+        const products = await productsCollection.find(query).toArray();
+        res.send(products);
+    })
+
+    // to load my products from seller account
+    app.get('/myProducts', async(req, res)=>{
+        const email = req.query.email;
+        console.log(email);
+        const query = {sellerEmail: email};
+        const products = await productsCollection.find(query).toArray();
+        res.send(products);
+    })
+
     // to get the booked products
     app.get('/bookings', async (req, res) => {
         const email = req.query.email;
@@ -75,6 +115,15 @@ async function run() {
         const user = req.body;
         const result = await usersCollection.insertOne(user);
         res.send(result);
+    })
+
+
+    // to verify admin
+    app.get('/users/accTypeCheck/:email', async (req, res) => {
+        const email = req.params.email;
+        const query = { email };
+        const user = await usersCollection.findOne(query);
+        res.send({accountType: user?.accountType});
     })
 
 }
