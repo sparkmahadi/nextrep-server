@@ -16,11 +16,40 @@ app.use(express.json())
 const uri = 'mongodb://localhost:27017';
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
+function verifyJWT(req, res, next){
+    const authHeader = req.headers.authorization;
+    if(!authHeader){
+        return res.status(401).send({message:'unauthorized access'});
+    }
+    const token = authHeader.split(' ')[1];
+    console.log(token);
+    jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded)=>{
+        if(err){
+            return res.status(403).send({message: 'forbidden access'})
+        }
+        req.decoded = decoded;
+        next();
+    })
+}
+
 async function run() {
     const categoriesCollection = client.db("nextrep").collection("categories");
     const productsCollection = client.db("nextrep").collection("products");
     const bookingsCollection = client.db("nextrep").collection("bookings");
     const usersCollection = client.db("nextrep").collection("users");
+    const reportedItemsCollection = client.db("nextrep").collection("reportedItems");
+
+    app.get('/jwt', async (req, res) => {
+        const email = req.query.email;
+        console.log(email);
+        const query = { email: email };
+        const user = await usersCollection.findOne(query);
+        if (user) {
+            const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, { expiresIn: '24h' })
+            return res.send({ accessToken: token });
+        }
+        res.status(403).send({ accessToken: '' })
+    });
 
     // to load the brands
     app.get('/categories', async (req, res) => {
@@ -29,10 +58,10 @@ async function run() {
         res.send(result);
     })
 
-    // to load the products of brands
+    // to load the available products of brands
     app.get('/category/:id', async (req, res) => {
         const id = parseInt(req.params.id);
-        const query = { brandId: id };
+        const query = { brandId: id, status: 'Available'};
         const products = await productsCollection.find(query).toArray();
         res.send(products);
     })
@@ -102,16 +131,21 @@ async function run() {
     })
 
     // to load my products from seller account
-    app.get('/myProducts', async (req, res) => {
+    app.get('/myProducts', verifyJWT, async (req, res) => {
         const email = req.query.email;
         const query = { sellerEmail: email };
         const products = await productsCollection.find(query).toArray();
         res.send(products);
     })
 
-    // to get the booked products
-    app.get('/bookings', async (req, res) => {
+    // to get the booked products by buyers
+    app.get('/bookings', verifyJWT, async (req, res) => {
         const email = req.query.email;
+        const decodedEmail = req.decoded.email;
+        console.log(decodedEmail);
+        if(email !== decodedEmail){
+            return res.status(403).send({message: "forbidden access"})
+        }
         const query = { buyerEmail: email };
         const bookings = await bookingsCollection.find(query).toArray();
         res.send(bookings);
@@ -120,20 +154,60 @@ async function run() {
     // to post the booked products
     app.post('/bookings', async (req, res) => {
         const booking = req.body;
+        const email = req.query.email;
+        const id = req.query.productId;
+        const bookingQuery = {buyerEmail: email, productId: id};
+
+        const bookedAlready = await bookingsCollection.findOne(bookingQuery);
+        if(bookedAlready){
+            return res.send({message: "You've booked this item already"})
+        }
         const result = await bookingsCollection.insertOne(booking);
+        res.send(result);
+    })
+
+    // to load the reported items
+    app.get('/reportedItems', verifyJWT, async(req, res)=>{
+        const query = {};
+        const items = await reportedItemsCollection.find().toArray();
+        res.send(items);
+    })
+
+    // to post the reported items
+    app.post('/reportedItems', async (req, res) => {
+        const report = req.body;
+        const email = req.query.email;
+        const id = req.query.productId;
+        const reportingQuery = {buyerEmail: email, productId: id};
+
+        const reportedAlready = await reportedItemsCollection.findOne(reportingQuery);
+        if(reportedAlready){
+            return res.send({message: "You've reported this item already"})
+        }
+        const result = await reportedItemsCollection.insertOne(report);
+        res.send(result);
+    })
+
+    // to delete the from reported items and productsCollection
+    app.delete('/reportedItems/:id', async(req, res)=>{
+        const id = req.params.id;
+        console.log(id);
+        const query = { productId: id};
+        const result = await reportedItemsCollection.deleteOne(query);
+        console.log(result);
         res.send(result);
     })
 
 
     // to get the sellers
-    app.get('/sellers', async (req, res) => {
+    app.get('/sellers', verifyJWT, async (req, res) => {
         const query = { accountType: 'Seller' };
         const users = await usersCollection.find(query).toArray();
         res.send(users);
     });
 
     // to get the buyers
-    app.get('/buyers', async (req, res) => {
+    app.get('/buyers', verifyJWT, async (req, res) => {
         const query = { accountType: 'Buyer' };
         const users = await usersCollection.find(query).toArray();
         res.send(users);
@@ -142,8 +216,13 @@ async function run() {
     // to post the users
     app.post('/users', async (req, res) => {
         const user = req.body;
-        const result = await usersCollection.insertOne(user);
-        res.send(result);
+        const query = {email: user.email};
+        const oldUser = await usersCollection.findOne(query);
+        if(!oldUser){
+            const result = await usersCollection.insertOne(user);
+            return res.send(result);
+        }
+        return res.send({message: "You're an old user"});
     })
 
     // to update verified status of users
