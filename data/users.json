@@ -1,0 +1,41 @@
+[{
+  "_id": {
+    "$oid": "637f84e4dc81691204ae5aca"
+  },
+  "name": "Shahid",
+  "email": "shahid@play.com",
+  "accountType": "Buyer",
+  "verified": true
+},{
+  "_id": {
+    "$oid": "637f84f9dc81691204ae5acb"
+  },
+  "name": "Sojib",
+  "email": "sojib@sojib.com",
+  "accountType": "Seller",
+  "verified": true
+},{
+  "_id": {
+    "$oid": "638020aa7700488d2c8620b2"
+  },
+  "name": "Md. Mahadi Hasan",
+  "email": "sparkmahadi@gmail.com",
+  "accountType": "Admin",
+  "verified": true
+},{
+  "_id": {
+    "$oid": "638036d416fe7e65421383d8"
+  },
+  "name": "spark",
+  "email": "sparkm@gmail.com",
+  "accountType": "Seller",
+  "verified": true
+},{
+  "_id": {
+    "$oid": "63808a6dc05471b90dc62f2f"
+  },
+  "name": "Md. Mahadi Hasan",
+  "email": "mahadi.development@gmail.com",
+  "accountType": "Buyer",
+  "verified": false
+}]

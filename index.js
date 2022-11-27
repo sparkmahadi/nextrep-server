@@ -3,6 +3,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 
 const app = express();
@@ -12,8 +13,8 @@ const port = process.env.PORT || 5000;
 app.use(cors())
 app.use(express.json())
 
-// const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.gp7ekja.mongodb.net/?retryWrites=true&w=majority`;
-const uri = 'mongodb://localhost:27017';
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.gp7ekja.mongodb.net/?retryWrites=true&w=majority`;
+// const uri = 'mongodb://localhost:27017';
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
 function verifyJWT(req, res, next){
@@ -51,6 +52,22 @@ async function run() {
         res.status(403).send({ accessToken: '' })
     });
 
+    app.post('/create-payment-intent', async(req, res)=>{
+        const booked = req.body;
+        const price = booked.price;
+        const amount = price*100;
+
+        const paymentIntent = await stripe.paymentIntents.create({
+            currency : 'usd',
+            amount: amount,
+            'payment_method_types': [
+                'card'
+            ],
+        });
+
+        res.send({clientSecret: paymentIntent.client_secret})
+    })
+
     // to load the brands
     app.get('/categories', async (req, res) => {
         const query = {};
@@ -73,11 +90,21 @@ async function run() {
         res.send(result);
     });
 
+    // to load a product with string id for status update
+    app.get('/products/:id', async (req, res) => {
+        const id = req.params.id;
+        console.log(id);
+        const query = { _id: new ObjectId(id)};
+        const product = await productsCollection.findOne(query);
+        res.send(product);
+    })
+
     // to update a product with id
     app.put('/products/:id', async (req, res) => {
         const id = req.params.id;
         const query = { _id: ObjectId(id) };
         const product = req.body;
+        console.log(product);
         const option = { upsert: true };
         let updateProduct = {};
         if (product.status) {
@@ -117,7 +144,6 @@ async function run() {
     // to delete a product
     app.delete('/products/:id', async (req, res) => {
         const id = req.params.id;
-        console.log(id);
         const query = { _id: ObjectId(id) };
         const result = await productsCollection.deleteOne(query);
         res.send(result);
@@ -150,6 +176,30 @@ async function run() {
         const bookings = await bookingsCollection.find(query).toArray();
         res.send(bookings);
     });
+
+    // to load a booked product by buyer for payment
+    app.get('/bookings/:id', async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: ObjectId(id) };
+        const booking = await bookingsCollection.findOne(query);
+        res.send(booking);
+    });
+
+    // to update booking as paid after payment
+    app.put('/bookings/:id', async(req, res)=>{
+        const id = req.params.id;
+        const query = { _id: ObjectId(id) };
+        const paymentInfo = req.body;
+        const option = { upsert: true };
+        const updateBooking = {
+            $set: {
+                payment: paymentInfo.payment,
+                paymentTime: paymentInfo.paymentTime
+            }
+        };
+        const paid = await bookingsCollection.updateOne(query, updateBooking, option);
+        res.send(paid);
+    })
 
     // to post the booked products
     app.post('/bookings', async (req, res) => {
@@ -191,10 +241,8 @@ async function run() {
     // to delete the from reported items and productsCollection
     app.delete('/reportedItems/:id', async(req, res)=>{
         const id = req.params.id;
-        console.log(id);
         const query = { productId: id};
         const result = await reportedItemsCollection.deleteOne(query);
-        console.log(result);
         res.send(result);
     })
 
@@ -213,6 +261,14 @@ async function run() {
         res.send(users);
     });
 
+    // to load a user to check availability in db
+    app.get('/users/:email', async (req, res) => {
+        const email = req.params.email;
+        const query = { email: email };
+        const user = await usersCollection.findOne(query);
+        res.send(user);
+    });
+
     // to post the users
     app.post('/users', async (req, res) => {
         const user = req.body;
@@ -222,7 +278,7 @@ async function run() {
             const result = await usersCollection.insertOne(user);
             return res.send(result);
         }
-        return res.send({message: "You're an old user"});
+        return res.send({message: "Welcome Back!"});
     })
 
     // to update verified status of users
@@ -237,6 +293,14 @@ async function run() {
             }
         };
         const result = await usersCollection.updateOne(query, updateUser, option);
+        res.send(result);
+    })
+
+    // to delete a user
+    app.delete('/users/:id', async(req, res)=>{
+        const id = req.params.id;
+        const query={_id: ObjectId(id)};
+        const result = await usersCollection.deleteOne(query);
         res.send(result);
     })
 
