@@ -17,16 +17,15 @@ const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@clu
 // const uri = 'mongodb://localhost:27017';
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
-function verifyJWT(req, res, next){
+function verifyJWT(req, res, next) {
     const authHeader = req.headers.authorization;
-    if(!authHeader){
-        return res.status(401).send({message:'unauthorized access'});
+    if (!authHeader) {
+        return res.status(401).send({ message: 'unauthorized access' });
     }
     const token = authHeader.split(' ')[1];
-    console.log(token);
-    jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded)=>{
-        if(err){
-            return res.status(403).send({message: 'forbidden access'})
+    jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded) => {
+        if (err) {
+            return res.status(403).send({ message: 'forbidden access' })
         }
         req.decoded = decoded;
         next();
@@ -40,9 +39,28 @@ async function run() {
     const usersCollection = client.db("nextrep").collection("users");
     const reportedItemsCollection = client.db("nextrep").collection("reportedItems");
 
+    const verifyAdmin = async (req, res, next) => {
+        const decodedEmail = req.decoded.email;
+        const query = { email: decodedEmail };
+        const user = await usersCollection.findOne(query);
+        if (user?.accountType !== 'Admin') {
+            return res.status(403).send({ message: "forbidden. You're not an admin" })
+        }
+        next();
+    }
+
+    const verifySeller = async (req, res, next) => {
+        const decodedEmail = req.decoded.email;
+        const query = { email: decodedEmail };
+        const user = await usersCollection.findOne(query);
+        if (user?.accountType !== 'Seller') {
+            return res.status(403).send({ message: "forbidden. You're not a seller" })
+        }
+        next();
+    }
+
     app.get('/jwt', async (req, res) => {
         const email = req.query.email;
-        console.log(email);
         const query = { email: email };
         const user = await usersCollection.findOne(query);
         if (user) {
@@ -52,20 +70,20 @@ async function run() {
         res.status(403).send({ accessToken: '' })
     });
 
-    app.post('/create-payment-intent', async(req, res)=>{
+    app.post('/create-payment-intent', async (req, res) => {
         const booked = req.body;
         const price = booked.price;
-        const amount = price*100;
+        const amount = price * 100;
 
         const paymentIntent = await stripe.paymentIntents.create({
-            currency : 'usd',
+            currency: 'usd',
             amount: amount,
             'payment_method_types': [
                 'card'
             ],
         });
 
-        res.send({clientSecret: paymentIntent.client_secret})
+        res.send({ clientSecret: paymentIntent.client_secret })
     })
 
     // to load the brands
@@ -78,13 +96,13 @@ async function run() {
     // to load the available products of brands
     app.get('/category/:id', async (req, res) => {
         const id = parseInt(req.params.id);
-        const query = { brandId: id, status: 'Available'};
+        const query = { brandId: id, status: 'Available' };
         const products = await productsCollection.find(query).toArray();
         res.send(products);
     })
 
-    // to post new product
-    app.post('/products', async (req, res) => {
+    // to post or add new product
+    app.post('/products', verifyJWT, verifySeller, async (req, res) => {
         const product = req.body;
         const result = await productsCollection.insertOne(product);
         res.send(result);
@@ -93,8 +111,7 @@ async function run() {
     // to load a product with string id for status update
     app.get('/products/:id', async (req, res) => {
         const id = req.params.id;
-        console.log(id);
-        const query = { _id: new ObjectId(id)};
+        const query = { _id: new ObjectId(id) };
         const product = await productsCollection.findOne(query);
         res.send(product);
     })
@@ -104,7 +121,6 @@ async function run() {
         const id = req.params.id;
         const query = { _id: ObjectId(id) };
         const product = req.body;
-        console.log(product);
         const option = { upsert: true };
         let updateProduct = {};
         if (product.status) {
@@ -157,7 +173,7 @@ async function run() {
     })
 
     // to load my products from seller account
-    app.get('/myProducts', verifyJWT, async (req, res) => {
+    app.get('/myProducts', verifyJWT, verifySeller, async (req, res) => {
         const email = req.query.email;
         const query = { sellerEmail: email };
         const products = await productsCollection.find(query).toArray();
@@ -168,9 +184,8 @@ async function run() {
     app.get('/bookings', verifyJWT, async (req, res) => {
         const email = req.query.email;
         const decodedEmail = req.decoded.email;
-        console.log(decodedEmail);
-        if(email !== decodedEmail){
-            return res.status(403).send({message: "forbidden access"})
+        if (email !== decodedEmail) {
+            return res.status(403).send({ message: "forbidden access" })
         }
         const query = { buyerEmail: email };
         const bookings = await bookingsCollection.find(query).toArray();
@@ -186,7 +201,7 @@ async function run() {
     });
 
     // to update booking as paid after payment
-    app.put('/bookings/:id', async(req, res)=>{
+    app.put('/bookings/:id', async (req, res) => {
         const id = req.params.id;
         const query = { _id: ObjectId(id) };
         const paymentInfo = req.body;
@@ -206,18 +221,18 @@ async function run() {
         const booking = req.body;
         const email = req.query.email;
         const id = req.query.productId;
-        const bookingQuery = {buyerEmail: email, productId: id};
+        const bookingQuery = { buyerEmail: email, productId: id };
 
         const bookedAlready = await bookingsCollection.findOne(bookingQuery);
-        if(bookedAlready){
-            return res.send({message: "You've booked this item already"})
+        if (bookedAlready) {
+            return res.send({ message: "You've booked this item already" })
         }
         const result = await bookingsCollection.insertOne(booking);
         res.send(result);
     })
 
     // to load the reported items
-    app.get('/reportedItems', verifyJWT, async(req, res)=>{
+    app.get('/reportedItems', verifyJWT, async (req, res) => {
         const query = {};
         const items = await reportedItemsCollection.find().toArray();
         res.send(items);
@@ -228,34 +243,34 @@ async function run() {
         const report = req.body;
         const email = req.query.email;
         const id = req.query.productId;
-        const reportingQuery = {buyerEmail: email, productId: id};
+        const reportingQuery = { buyerEmail: email, productId: id };
 
         const reportedAlready = await reportedItemsCollection.findOne(reportingQuery);
-        if(reportedAlready){
-            return res.send({message: "You've reported this item already"})
+        if (reportedAlready) {
+            return res.send({ message: "You've reported this item already" })
         }
         const result = await reportedItemsCollection.insertOne(report);
         res.send(result);
     })
 
     // to delete the from reported items and productsCollection
-    app.delete('/reportedItems/:id', async(req, res)=>{
+    app.delete('/reportedItems/:id', verifyJWT, verifyAdmin, async (req, res) => {
         const id = req.params.id;
-        const query = { productId: id};
+        const query = { productId: id };
         const result = await reportedItemsCollection.deleteOne(query);
         res.send(result);
     })
 
 
     // to get the sellers
-    app.get('/sellers', verifyJWT, async (req, res) => {
+    app.get('/sellers', verifyJWT, verifyAdmin, async (req, res) => {
         const query = { accountType: 'Seller' };
         const users = await usersCollection.find(query).toArray();
         res.send(users);
     });
 
     // to get the buyers
-    app.get('/buyers', verifyJWT, async (req, res) => {
+    app.get('/buyers', verifyJWT, verifyAdmin, async (req, res) => {
         const query = { accountType: 'Buyer' };
         const users = await usersCollection.find(query).toArray();
         res.send(users);
@@ -272,13 +287,13 @@ async function run() {
     // to post the users
     app.post('/users', async (req, res) => {
         const user = req.body;
-        const query = {email: user.email};
+        const query = { email: user.email };
         const oldUser = await usersCollection.findOne(query);
-        if(!oldUser){
+        if (!oldUser) {
             const result = await usersCollection.insertOne(user);
             return res.send(result);
         }
-        return res.send({message: "Welcome Back!"});
+        return res.send({ message: "Welcome Back!" });
     })
 
     // to update verified status of users
@@ -297,9 +312,9 @@ async function run() {
     })
 
     // to delete a user
-    app.delete('/users/:id', async(req, res)=>{
+    app.delete('/users/:id', async (req, res) => {
         const id = req.params.id;
-        const query={_id: ObjectId(id)};
+        const query = { _id: ObjectId(id) };
         const result = await usersCollection.deleteOne(query);
         res.send(result);
     })
