@@ -61,6 +61,7 @@ async function run() {
 
     app.get('/jwt', async (req, res) => {
         const email = req.query.email;
+        console.log(email);
         const query = { email: email };
         const user = await usersCollection.findOne(query);
         if (user) {
@@ -141,9 +142,17 @@ async function run() {
         res.send(result);
     })
 
+    // to get the verification status of seller during add product
+    app.get('/users/sellerVerification/:email',  async(req, res)=>{
+        const email = req.params.email;
+        const query = {email: email};
+        const result = await usersCollection.findOne(query);
+        res.send(result.verified)
+    })
+
     // to update products with email
     // when user got verified, to update the products under that email
-    app.put('/products/sellerVerification/:email', async (req, res) => {
+    app.put('/products/sellerVerification/:email', verifyJWT, verifyAdmin, async (req, res) => {
         const email = req.params.email;
         const query = { sellerEmail: email };
         const sellerVerification = req.body;
@@ -158,7 +167,7 @@ async function run() {
     })
 
     // to delete a product
-    app.delete('/products/:id', async (req, res) => {
+    app.delete('/products/:id', verifyJWT, async (req, res) => {
         const id = req.params.id;
         const query = { _id: ObjectId(id) };
         const result = await productsCollection.deleteOne(query);
@@ -201,7 +210,7 @@ async function run() {
     });
 
     // to update booking as paid after payment
-    app.put('/bookings/:id', async (req, res) => {
+    app.put('/bookings/:id', verifyJWT, async (req, res) => {
         const id = req.params.id;
         const query = { _id: ObjectId(id) };
         const paymentInfo = req.body;
@@ -217,7 +226,7 @@ async function run() {
     })
 
     // to post the booked products
-    app.post('/bookings', async (req, res) => {
+    app.post('/bookings', verifyJWT, async (req, res) => {
         const booking = req.body;
         const email = req.query.email;
         const id = req.query.productId;
@@ -232,7 +241,7 @@ async function run() {
     })
 
     // to load the reported items
-    app.get('/reportedItems', verifyJWT, async (req, res) => {
+    app.get('/reportedItems', verifyJWT, verifyAdmin, async (req, res) => {
         const query = {};
         const items = await reportedItemsCollection.find().toArray();
         res.send(items);
@@ -297,7 +306,7 @@ async function run() {
     })
 
     // to update verified status of users
-    app.put('/users/:email', async (req, res) => {
+    app.put('/users/:email', verifyJWT, verifyAdmin, async (req, res) => {
         const email = req.params.email;
         const query = { email: email };
         const verification = req.body;
@@ -312,7 +321,7 @@ async function run() {
     })
 
     // to delete a user
-    app.delete('/users/:id', async (req, res) => {
+    app.delete('/users/:id', verifyJWT, verifyAdmin, async (req, res) => {
         const id = req.params.id;
         const query = { _id: ObjectId(id) };
         const result = await usersCollection.deleteOne(query);
@@ -320,7 +329,7 @@ async function run() {
     })
 
 
-    // to verify admin
+    // to check the accountType of user and admin
     app.get('/users/accTypeCheck/:email', async (req, res) => {
         const email = req.params.email;
         const query = { email };
