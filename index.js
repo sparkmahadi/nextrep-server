@@ -38,6 +38,7 @@ async function run() {
     const bookingsCollection = client.db("nextrep").collection("bookings");
     const usersCollection = client.db("nextrep").collection("users");
     const reportedItemsCollection = client.db("nextrep").collection("reportedItems");
+    const reviewsCollection = client.db("nextrep").collection("reviews");
 
     const verifyAdmin = async (req, res, next) => {
         const decodedEmail = req.decoded.email;
@@ -117,6 +118,20 @@ async function run() {
         res.send(product);
     })
 
+    // to load products with search filter
+    app.get('/search/:key', async (req, res) => {
+        const key = req.params.key;
+        const products = await productsCollection.find({
+            "$or": [
+                { name: { $regex: new RegExp(key, "i") } },
+                { location: { $regex: new RegExp(key, "i") } },
+                { brandName: { $regex: new RegExp(key, "i") } },
+            ]
+        }).toArray();
+        res.send(products);
+        console.log(products);
+    })
+
     // to update a product with id
     app.put('/products/:id', async (req, res) => {
         const id = req.params.id;
@@ -143,9 +158,9 @@ async function run() {
     })
 
     // to get the verification status of seller during add product
-    app.get('/users/sellerVerification/:email',  async(req, res)=>{
+    app.get('/users/sellerVerification/:email', async (req, res) => {
         const email = req.params.email;
-        const query = {email: email};
+        const query = { email: email };
         const result = await usersCollection.findOne(query);
         res.send(result.verified)
     })
@@ -335,6 +350,20 @@ async function run() {
         const query = { email };
         const user = await usersCollection.findOne(query);
         res.send({ accountType: user?.accountType });
+    })
+
+    // to get the reviews
+    app.get('/reviews', async (req, res) => {
+        const query = {};
+        const reviews = await reviewsCollection.find(query).toArray();
+        res.send(reviews);
+    })
+
+    // to post the reviews
+    app.post('/reviews', async (req, res) => {
+        const review = req.body;
+        const result = await reviewsCollection.insertOne(review);
+        res.send(result);
     })
 
 }
